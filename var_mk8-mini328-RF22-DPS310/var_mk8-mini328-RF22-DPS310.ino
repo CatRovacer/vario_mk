@@ -5,8 +5,13 @@
  *****************************************************************************/
 
 #include <SPI.h>
-#include <RF22.h>           // Библиотека RF22 для работы с RFM22B/RF22B
+//#include "../varlib/RF22.h"           // Библиотека RF22 для работы с RFM22B/RF22B
+#include <radioLib.h>           // Библиотека RF22 для работы с RFM22B/RF22B
 #include <Adafruit_DPS310.h> // Библиотека для DPS310
+
+#define VERBOSE_ENABLED false
+#include "../varlib/def_dbg-print.h"
+
 #if 0
 | Arduino Pro Mini | RF22B |
 |------------------|-------|

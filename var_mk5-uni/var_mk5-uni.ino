@@ -21,8 +21,9 @@
 
 #define BLE_EN 0
 
-#define VERBOSE_ENABLED false
-
+#define VERBOSE_ENABLED true
+#include "def_dbg-print.h"
+#if 0
 #ifdef VERBOSE_ENABLED
   #define DBG_PRINT(...)    Serial.print(__VA_ARGS__)
   #define DBG_PRINTLN(...)  Serial.println(__VA_ARGS__)
@@ -31,6 +32,7 @@
   #define DBG_PRINT(...)
   #define DBG_PRINTLN(...)
   #define DBG_PRINTF(...)
+#endif
 #endif
 
 
@@ -62,6 +64,10 @@
 #define BUTTON_PIN      2   // 7 кнопка (активный низкий уровень с подтяжкой)
 #define BUZZER_PIN      6   // PWM выход на пьезоизлучатель
 #define LED_PIN         13  // встроенный светодиод для индикации
+
+//esp32c6
+#define SDA_PIN 20
+#define SCL_PIN 19
 
 // ------------------- Параметры вариометра -------------------
 #define SERIAL_BAUD 115200
@@ -171,7 +177,7 @@ float CalculateAltitude(float press);
 // ------------------- setup() -------------------
 void setup() {
   Serial.begin(SERIAL_BAUD);
-  while (!Serial) delay(10);
+//  while (!Serial) delay(10);
 
   // Инициализация пинов
   pinMode(BUTTON_PIN, INPUT_PULLUP);
@@ -231,7 +237,8 @@ void loop() {
 // ------------------- Functions implementation -------------------
 // Sensor initialize
 int HardwareInit(){
-  // Initialize BARO sensor
+if (SIMULATION_MODE) return (0);
+  Wire.begin(SDA_PIN, SCL_PIN);
 
 #if DPS310_EN
   if (!BARO.begin_I2C()) {

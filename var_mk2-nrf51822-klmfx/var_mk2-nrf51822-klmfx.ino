@@ -9,7 +9,7 @@
 #include <Wire.h>
 #include <Adafruit_BMP085.h>
 
-#define VERBOSE_ENABLED false
+#define VERBOSE_ENABLED true
 
 #ifdef VERBOSE_ENABLED
   #define DBG_PRINT(...)    Serial.print(__VA_ARGS__)
@@ -20,11 +20,17 @@
   #define DBG_PRINTLN(...)
   #define DBG_PRINTF(...)
 #endif
+//esp32c6
+#define SDA_PIN 20
+#define SCL_PIN 19
 
 // === ПИН-НАЗНАЧЕНИЯ ДЛЯ NRF51822 ===
-#define BUZZER_PIN    8     // Выход на динамик
-#define MODE_BUTTON_PIN   13    // Кнопка калибровки
-#define LED_PIN      17    // Встроенный светодиод (опционально)
+#define BUZZER_PIN    18     // Выход на динамик
+#define MODE_BUTTON_PIN   0    // Кнопка калибровки
+
+// #define BUZZER_PIN    8     // Выход на динамик
+// #define MODE_BUTTON_PIN   13    // Кнопка калибровки
+#define LED_PIN     17    // Встроенный светодиод (опционально)
 
 // === ПАРАМЕТРЫ ВАРИОМЕТРА ===
 const float SMOOTHING_FACTOR = 0.35;  // Коэффициент сглаживания вертикальной скорости (меньше = плавнее)
@@ -42,9 +48,6 @@ const int TONE_SLOW_CLIMB = 1500;      // Медленный набор
 const int TONE_SINK = 600;             // Снижение -> Низкий тон
 const int TONE_FAST_SINK = 300;        // Быстрое снижение (прерывистый гудок)
 
-// ============================================================================
-// Фильтр Калмана (целочисленный, без float)
-// ============================================================================
 // Параметры фильтра Калмана (масштабированные)
 #define KALMAN_Q_SCALED     10    // Q * 1000
 #define KALMAN_R_SCALED     500   // R * 1000
@@ -158,7 +161,7 @@ void playVariometerTone(float speed) {
 
 // === КАЛИБРОВКА НУЛЯ (Земля/Старт) ===
 void calibrateZero() {
-  Serial.println("--- КАЛИБРОВКА ---");
+  DBG_PRINTLN("--- CALIBRATION ---");
   // Берем 50 замеров для усреднения
   float sum = 0;
 
@@ -175,26 +178,33 @@ void calibrateZero() {
   tone(BUZZER_PIN, 2000, 100);
   delay(150);
   tone(BUZZER_PIN, 2500, 100);
-  Serial.print("Reference set to: ");
-  Serial.println(groundReference);
+  DBG_PRINT("Reference set to: ");
+  DBG_PRINTLN(groundReference);
 }
 
 // === НАСТРОЙКА (SETUP) ===
 void setup() {
   Serial.begin(115200);
-  Serial.println("Brauniger Style Variometer for nRF51822");
+//    while (!Serial) delay(10);
 
-  // Настройка пинов
+//  DBG_PRINTLN("Vegetable Variometer mk2");
+	Serial.println("Vegetable Variometer mk2");
+    // Настройка пинов
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(MODE_BUTTON_PIN, INPUT_PULLDOWN); // Для nRF используем внутренний Pull-down если есть, иначе внешний резистор 10кОм на GND
   pinMode(LED_PIN, OUTPUT);
-  
-  digitalWrite(BUZZER_PIN, LOW);
-  digitalWrite(LED_PIN, LOW);
+  for (int i = 0; i < 5; i++){
+    digitalWrite(LED_PIN, HIGH);
+    delay(500);
+    digitalWrite(LED_PIN, LOW);
+    delay(500);
+  }
 
   // Инициализация BMP085
+  Wire.begin(SDA_PIN, SCL_PIN);
   if (!BARO.begin()) {
-    Serial.println("BMP085 ERROR! Check wiring (SDA=Pin26? SCL=Pin27? for nRF51)");
+	  Serial.println("Could not find a valid BMP085 sensor, check wiring!");
+//    DBG_PRINTLN("BMP085 init ERROR!");
     // Код ошибки: бесконечный писк
     while (1) {
       tone(BUZZER_PIN, 1000, 500);
@@ -202,7 +212,7 @@ void setup() {
     }
   }
   
-  Serial.println("BMP085 OK. Press button to set zero altitude.");
+  DBG_PRINTLN("BMP085 OK. Press button to set zero altitude.");
   
   // Ожидание калибровки перед стартом
   calibrateZero();
@@ -269,9 +279,9 @@ void loop() {
     lastTime = now;
     
     // Вывод в Serial монитор для отладки
-    Serial.print("Alt:"); Serial.print(currentAltitude, 2);
-    Serial.print("m | V:"); Serial.print(verticalSpeed, 2);
-    Serial.println("m/s");
+    DBG_PRINT("Alt:"); DBG_PRINT(currentAltitude, 2);
+    DBG_PRINT("m | V:"); DBG_PRINT(verticalSpeed, 2);
+    DBG_PRINTLN("m/s");
   }
 
   // 4. Звуковая индикация

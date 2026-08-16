@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_DPS310.h>  // Поддерживает SPL06-001 и DPS310
-#include <KalmanFilter.h>      // Библиотека фильтрации
+//#include <KalmanFilter.h>      // Библиотека фильтрации
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
@@ -29,12 +29,16 @@ const int BEEP_INTERVAL_MS = 400;     // Длительность импульс
 #define SDA_PIN 12  // 8 
 #define SCL_PIN 13  // 9
 
-#define PIN_BUZZER 15      // Пин пьезодинамика (PWM)
-#define PIN_CALIB_BTN 0    // Кнопка калибровки (замыкает на GND)
+// #define PIN_BUZZER 15      // Пин пьезодинамика (PWM)
+// #define PIN_CALIB_BTN 0    // Кнопка калибровки (замыкает на GND)
+
+#define BUZZER_PIN    15     // Выход на динамик
+#define MODE_BUTTON_PIN   0    // Кнопка калибровки
+//#define LED_PIN      17    // Встроенный светодиод (опционально)
 
 // ================= Глобальные объекты =================
 Adafruit_DPS310 dps;
-KalmanFilter kf;            // Фильтр Калмана (сглаживание резких скачков)
+//KalmanFilter kf;            // Фильтр Калмана (сглаживание резких скачков)
 
 // Переменные состояния
 float currentVerticalSpeed = 0.0; // Текущая вертикальная скорость (м/с)
@@ -54,6 +58,48 @@ bool beepState = false;
 
 // Настройки звукового режима
 bool isAlarmBeeping = false;
+
+// === ПАРАМЕТРЫ ВАРИОМЕТРА ===
+const float SMOOTHING_FACTOR = 0.35;  // Коэффициент сглаживания вертикальной скорости (меньше = плавнее)
+const float KALMAN_NOISE = 2.0;       // Шум датчика для фильтра Калмана
+
+// Параметры фильтра Калмана (масштабированные)
+#define KALMAN_Q_SCALED     10    // Q * 1000
+#define KALMAN_R_SCALED     500   // R * 1000
+#define KALMAN_INIT_P       1000  // Начальная ковариация * 1000
+
+static int32_t kalman_x = 0;          // состояние
+static int32_t kalman_p = KALMAN_INIT_P; // ковариация * 1000
+static int32_t kalman_k = 0;          // коэффициент Калмана * 1000
+
+void kalman_init(int32_t initial_x) {
+    kalman_x = initial_x;
+    kalman_p = KALMAN_INIT_P;
+    kalman_k = 0;
+}
+
+int32_t kalman_update(int32_t measurement) {
+    // Прогноз: p = p + q
+    kalman_p = kalman_p + KALMAN_Q_SCALED;
+    if (kalman_p > 1000000) kalman_p = 1000000;
+    
+    // Коэффициент Калмана: k = p / (p + r)
+    // Используем целочисленное деление с масштабированием
+    int32_t denominator = kalman_p + KALMAN_R_SCALED;
+    if (denominator == 0) denominator = 1;
+    kalman_k = (kalman_p * 1000) / denominator;
+    
+    // Обновление состояния: x = x + k * (z - x)
+    int32_t error = measurement - kalman_x;
+    int32_t correction = (kalman_k * error) / 1000;
+    kalman_x = kalman_x + correction;
+    
+    // Обновление ковариации: p = (1 - k) * p
+    kalman_p = (kalman_p * (1000 - kalman_k)) / 1000;
+    if (kalman_p < 1) kalman_p = 1;
+    
+    return kalman_x;
+}
 
 // ================= Объявление класса Callback для BLE =================
 class MyServerCallbacks : public BLEServerCallbacks {
@@ -84,18 +130,19 @@ class MyCallbacks : public BLECharacteristicCallbacks {
 
 // ================= Функции =================
 void calibrateZero() {
-  if (dps.getPressure(&referencePressure)) {
+  if (BARO.getPressure(&referencePressure)) {
     Serial.print("Zero calibration set at pressure: ");
     Serial.println(referencePressure);
     // Дополнительно можно подать сигнал подтверждения
-    tone(PIN_BUZZER, 2000, 200);
+    tone(MODE_BUTTON_PIN, 2000, 200);
   } else {
     Serial.println("Calibration failed: can't read pressure!");
   }
+  kalman_init(0);
 }
 
 float getVerticalSpeed() {
-  if (!dps.getPressure(&referencePressure)) { // В реальности нужно читать давление каждую итерацию
+  if (!BARO.getPressure(&referencePressure)) { // В реальности нужно читать давление каждую итерацию
     return currentVerticalSpeed; // Возвращаем старое значение при ошибке
   }
   
@@ -111,7 +158,7 @@ float getVerticalSpeed() {
   // Проще использовать показания датчика, если он поддерживает altimeter.
   
   float pressurePa;
-  if (!dps.getPressure(&pressurePa)) return currentVerticalSpeed;
+  if (!BARO.getPressure(&pressurePa)) return currentVerticalSpeed;
   
   // Стандартная барометрическая формула (упрощенная, без учета температуры)
   // H = 44330 * (1 - (P/P0)^(1/5.255))
@@ -155,7 +202,7 @@ void updateAudio(float vario_speed) {
   
   // Проверка на зону молчания (Deadband)
   if (abs(vario_speed) < DEADBAND) {
-    noTone(PIN_BUZZER);
+    noTone(MODE_BUTTON_PIN);
     return;
   }
   
@@ -192,9 +239,9 @@ void updateAudio(float vario_speed) {
   
   // Воспроизведение
   if (shouldBeep) {
-    tone(PIN_BUZZER, freq);
+    tone(MODE_BUTTON_PIN, freq);
   } else {
-    noTone(PIN_BUZZER);
+    noTone(MODE_BUTTON_PIN);
   }
 }
 
@@ -204,12 +251,12 @@ void setup() {
   
   // 1. Инициализация датчика давления
   Wire.begin(SDA_PIN, SCL_PIN);
-  if (!dps.begin_I2C()) {
+  if (!BARO.begin_I2C()) {
     Serial.println("DPS310/SPL06 not found! Check wiring.");
     while (1) delay(100);
   }
-  dps.setPressureOversampling(7);  // Максимальное усреднение для стабильности
-  dps.setMode(DPS310_MODE_CONTINUOUS);
+  BARO.setPressureOversampling(7);  // Максимальное усреднение для стабильности
+  BARO.setMode(DPS310_MODE_CONTINUOUS);
   
   // Первичная калибровка (сбрасываем высоту на текущую)
   delay(500);
@@ -271,7 +318,7 @@ void loop() {
     Serial.print(" m/s   Press: ");
     // В реальности нужно хранить текущее давление глобально, здесь упрощенно
     float p;
-    if(dps.getPressure(&p)) Serial.println(p);
+    if(BARO.getPressure(&p)) Serial.println(p);
     else Serial.println("---");
     
     // 3. Отправка данных по BLE (как Serial Port)
