@@ -22,6 +22,8 @@
 #endif
 
 #define esp32c6_brd true
+#define nrf51802_brd false
+
 #if esp32c6_brd
 #define SDA_PIN 20
 #define SCL_PIN 19
@@ -30,13 +32,9 @@
 #define MODE_BUTTON_PIN   9    // Кнопка калибровки
 #endif
 
-#define nrf51802_brd false
 #if nrf51802_brd
-#define BUZZER_PIN    18     // Выход на динамик
-#define MODE_BUTTON_PIN   0    // Кнопка калибровки
-
-#define BUZZER_PIN    8     // Выход на динамик
-#define MODE_BUTTON_PIN   13    // Кнопка калибровки
+#define BUZZER_PIN    17     // Выход на динамик
+#define MODE_BUTTON_PIN   18    // Кнопка калибровки
 #define LED_PIN     17    // Встроенный светодиод (опционально)
 #endif
 
@@ -164,7 +162,7 @@ void playVariometerTone(float speed) {
   if (frequency > 0) {
     // Длительность звучания - половина общего времени импульса (чтобы были четкие паузы)
     int soundDuration = duration / 2;
-    DBG_PRINT("\n***playVariometerTone; Tone: freq/durat: ");  DBG_PRINT(frequency,3); DBG_PRINTLN(soundDuration);  
+    DBG_PRINT("\n*** playVariometerTone; freq: ");  DBG_PRINT(frequency); DBG_PRINT("; durat: "); DBG_PRINTLN(soundDuration);  
     tone(BUZZER_PIN, frequency, soundDuration);
     // Пауза между писками (оставшаяся часть времени + задержка на прерывистость)
     delay(duration);
@@ -274,11 +272,11 @@ void loop() {
   
   // 3. Расчет вертикальной скорости (dV/dt)
   unsigned long now = millis();
-  float dt = (now - lastTime); // / 1000.0;
-  DBG_PRINT("*** loop; dt = "); DBG_PRINTLN(dt); 
-  if (dt >= 50 && dt < 1000) { // Расчет с частотой ~20 Гц
+  float dt = (now - lastTime) / 1000.0;
+//  DBG_PRINT("*** loop; dt = "); DBG_PRINTLN(dt); 
+  if (dt >= 0.05 && dt < 0.100) { // Расчет с частотой ~20 Гц
     float deltaAlt = currentAltitude - previousAltitude;
-    float instantSpeed = (deltaAlt * 1000)/ dt;
+    float instantSpeed = deltaAlt / dt;
     
     // Экспоненциальное сглаживание (аналог Brauniger)
     // filteredSpeed = (instantSpeed * FACTOR) + (filteredSpeed * (1-FACTOR))

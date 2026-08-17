@@ -18,13 +18,29 @@
  */
 
 #include <Wire.h>
-#include <SFE_BMP180.h>
+#include <Adafruit_BMP085.h>
 #include <ArduinoBLE.h>
 
 // ==================== НАСТРОЙКИ ====================
-#define BUTTON_PIN 6
+#define esp32c6_brd true
+#define esp32s3_brd false
+#define nrf51802_brd false 
+#define nrf52840_brd false 
+
+#if esp32c6_brd
+#define SDA_PIN 20
+#define SCL_PIN 19
+#define BUZZER_PIN  18
+#define LED_PIN     15    // Встроенный светодиод (опционально)
+#define MODE_BUTTON_PIN   9    // Кнопка калибровки
+#endif
+#if 0
+#define MODE_BUTTON_PIN 6
 #define BUZZER_PIN 5
-#define SIMULATION_PIN 7          // замкнуть на GND для входа в режим симуляции
+//#define SIMULATION_PIN 7          // замкнуть на GND для входа в режим симуляции
+#endif
+
+#define SIMULATION_MODE false  // true - режим симуляции, false - реальные данные
 
 // Параметры звука (аналог Brauniger IQ One)
 #define BASE_FREQ_UP 1200         // частота при подъеме (Гц)
@@ -41,7 +57,7 @@
 #define PRESSURE_SEA_LEVEL 1013.25 // давление на уровне моря (гПа)
 
 // ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
-SFE_BMP180 bmp180;
+Adafruit_BMP085 BARO;
 
 // Фильтр Калмана для высоты
 float kalman_X = 0;               // оценка состояния (высота)
@@ -67,8 +83,8 @@ unsigned long buttonPressTime = 0;
 bool buttonPressed = false;
 int clickCount = 0;
 unsigned long lastClickTime = 0;
-#define DOUBLE_CLICK_TIMEOUT 300   // мс
-#define LONG_PRESS_TIME 2000      // мс
+#define DOUBLE_CLICK_TIMEOUT 400   // мс
+#define LONG_PRESS_TIME 1500      // мс
 
 // Режим симуляции
 bool simulationMode = false;
@@ -199,7 +215,7 @@ String buildLK8EX1(float press, float alt, float vario, float temp, float batt) 
 
 // ==================== ОБРАБОТКА КНОПКИ ====================
 void handleButton() {
-  bool reading = digitalRead(BUTTON_PIN) == LOW;
+  bool reading = digitalRead(MODE_BUTTON_PIN) == LOW;
   unsigned long now = millis();
   
   if (reading && !buttonPressed) {
@@ -283,25 +299,26 @@ void setupBLE() {
 // ==================== НАСТРОЙКА ====================
 void setup() {
   Serial.begin(115200);
-  while (!Serial);
+//  while (!Serial);
   
   Serial.println("Variometer starting...");
   
   // Настройка пинов
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(SIMULATION_PIN, INPUT_PULLUP);
+  //pinMode(SIMULATION_PIN, INPUT_PULLUP);
   
   // Инициализация BMP180
-  Wire.begin();
-  if (!bmp180.begin()) {
-    Serial.println("BMP180 not found!");
+  Wire.begin(SDA_PIN, SCL_PIN);
+
+  if (!BARO.begin()) {
+    Serial.println("BMP085 not found!");
     while (1);
   }
-  Serial.println("BMP180 found");
+  Serial.println("BMP085 initialized");
   
   // Проверка режима симуляции
-  if (digitalRead(SIMULATION_PIN) == LOW) {
+  if (SIMULATION_MODE)  {
     simulationMode = true;
     Serial.println("SIMULATION MODE");
     simLastTime = millis();
@@ -313,19 +330,20 @@ void setup() {
   // Первое измерение для инициализации фильтра
   char status;
   double T, P;
-  status = bmp180.startTemperature();
+#if 0
+  status = BARO.startTemperature();
   if (status != 0) {
     delay(status);
-    status = bmp180.getTemperature(T);
+    status = BARO.readTemperature(T);
     if (status != 0) {
-      status = bmp180.startPressure(3);
+      status = BARO.readPressure(3);
       if (status != 0) {
         delay(status);
-        status = bmp180.getPressure(P, T);
+        status = BARO.readPressure(P, T);
         if (status != 0) {
           pressure = P;
           temperature = T;
-          float alt = bmp180.altitude(P, PRESSURE_SEA_LEVEL);
+          float alt = BARO.readAltitude(P, PRESSURE_SEA_LEVEL);
           kalman_X = alt;
           altitude = 0;
           baselinePressure = P;
@@ -333,6 +351,16 @@ void setup() {
       }
     }
   }
+#endif
+
+  P = BARO.readPressure();
+  T = BARO.readTemperature();
+  pressure = P;
+  temperature = T;
+  float alt = BARO.readAltitude();
+  kalman_X = alt;
+  altitude = 0;
+  baselinePressure = P;
   
   Serial.println("Ready!");
   tone(BUZZER_PIN, 2000, 100);
@@ -382,36 +410,23 @@ void loop() {
       char status;
       double T, P;
       
-      status = bmp180.startTemperature();
-      if (status != 0) {
-        delay(status);
-        status = bmp180.getTemperature(T);
-        if (status != 0) {
-          status = bmp180.startPressure(3);
-          if (status != 0) {
-            delay(status);
-            status = bmp180.getPressure(P, T);
-            if (status != 0) {
+        T = BARO.readTemperature();
+        P = BARO.readPressure();
               pressure = P;
               temperature = T;
               
               // Расчет абсолютной высоты
-              float rawAlt = bmp180.altitude(P, PRESSURE_SEA_LEVEL);
+              float rawAlt = BARO.readAltitude();
               
               // Фильтр Калмана
               float filteredAlt = kalmanUpdate(rawAlt);
               
-              // Относительная высота (с учетом baseline)
-              float baselineAlt = bmp180.altitude(baselinePressure, PRESSURE_SEA_LEVEL);
+              // Относительная высота (с учетом baseline)asel
+              float baselineAlt = BARO.readAltitude();
               altitude = filteredAlt - baselineAlt;
               
               // Расчет вертикальной скорости
               verticalSpeed = calculateVerticalSpeed(filteredAlt, now);
-            }
-          }
-        }
-      }
-    }
     
     // Генерация звука
     generateVarioSound(verticalSpeed);
@@ -448,7 +463,7 @@ void loop() {
     }
   }
 }
-
+}
 // ==================== ФУНКЦИЯ ДЛЯ OTA ====================
 /*
  * Для поддержки OTA обновлений через смартфон необходимо:

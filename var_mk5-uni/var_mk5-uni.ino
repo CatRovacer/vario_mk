@@ -2,42 +2,19 @@
    Вариометр на nRF52840 + DPS310/LPS22HB + пьезоизлучатель
    Формируем строку в прибор: $LK8EX1,altitude,vspeed*CS
 */
-#define ADAFRUIT_DPS310_LIB false
-#define DPS310_LIB      false
-#define LPS22HB_LIB	false
-
-#if ADAFRUIT_DPS310_LIB
-#include <Adafruit_DPS310.h>
-#elif DPS310_LIB
-#include <DPS310.h>
-#elif LPS22HB_LIB
-#include <Arduino_LPS22HB.h>
-#endif
-
 #define DPS310_EN 0
 #define LPS22HB_EN 0
 #define SPL06_EN 0
-#define BMP280_EN 1
+#define BMP280_EN 0
+#define BMP085_EN 1
 
 #define BLE_EN 0
 
 #define VERBOSE_ENABLED true
 #include "def_dbg-print.h"
-#if 0
-#ifdef VERBOSE_ENABLED
-  #define DBG_PRINT(...)    Serial.print(__VA_ARGS__)
-  #define DBG_PRINTLN(...)  Serial.println(__VA_ARGS__)
-  #define DBG_PRINTF(...)   Serial.printf(__VA_ARGS__)
-#else
-  #define DBG_PRINT(...)
-  #define DBG_PRINTLN(...)
-  #define DBG_PRINTF(...)
-#endif
-#endif
-
 
 // Параметры симуляции
-#define SIMULATION_MODE false  // true - режим симуляции, false - реальные данные
+#define SIMULATION_MODE true  // true - режим симуляции, false - реальные данные
 
 #include <Wire.h>
 #if BLE_EN
@@ -60,14 +37,44 @@
   #include <Adafruit_BMP280.h>
 #endif
 
-// ------------------- Настройки пинов -------------------
-#define BUTTON_PIN      2   // 7 кнопка (активный низкий уровень с подтяжкой)
-#define BUZZER_PIN      6   // PWM выход на пьезоизлучатель
-#define LED_PIN         13  // встроенный светодиод для индикации
+#if BMP085_EN
+  #include <Adafruit_BMP085.h>
+#endif
 
-//esp32c6
+// ------------------- Настройки пинов -------------------
+#define esp32c6_brd true
+#define esp32s3_brd false
+#define nrf51802_brd false 
+#define nrf52840_brd false 
+
+#if esp32c6_brd
 #define SDA_PIN 20
 #define SCL_PIN 19
+#define BUZZER_PIN  18
+#define LED_PIN     15    // Встроенный светодиод (опционально)
+#define MODE_BUTTON_PIN   9    // Кнопка калибровки
+#endif
+
+#if esp32s3_brd
+#define SDA_PIN 8
+#define SCL_PIN 9
+#define BUZZER_PIN  10
+#define LED_PIN     15    // Встроенный светодиод (опционально)
+#define MODE_BUTTON_PIN   0    // Кнопка калибровки
+#endif
+
+#if nrf52840_brd 
+#define BUZZER_PIN      6   // PWM выход на пьезоизлучатель
+#define MODE_BUTTON_PIN      2   // 7 кнопка (активный низкий уровень с подтяжкой)
+#define LED_PIN         13  // встроенный светодиод для индикации
+#endif
+
+#if nrf51802_brd
+#define BUZZER_PIN    17     // Выход на динамик
+#define MODE_BUTTON_PIN   18    // Кнопка калибровки
+#define LED_PIN     15    // Встроенный светодиод (опционально)
+#endif
+
 
 // ------------------- Параметры вариометра -------------------
 #define SERIAL_BAUD 115200
@@ -79,16 +86,16 @@
 #define KALMAN_R 0.5    // шум измерений (шум датчика)
 
 // Параметры звукового сигнала
-#define TONE_FREQUENCY 800    // частота тона (Гц)
+#define TONE_FREQUENCY 600    // частота тона (Гц)
 #define MIN_PULSE_DURATION 50   // минимальная длительность звука (мс)
-#define MAX_PULSE_DURATION 500  // максимальная длительность звука (мс)
+#define MAX_PULSE_DURATION 1000 //500  // максимальная длительность звука (мс)
 #define MIN_PAUSE_DURATION 50  // минимальная пауза (мс)
 #define MAX_PAUSE_DURATION 2000 // максимальная пауза (мс)
 #define SPEED_THRESHOLD 0.1    // порог скорости для включения звука (м/с)
 
 // Параметры кнопки
-#define LONG_PRESS_MS 2000     // длительное нажатие (мс)
-#define DOUBLE_CLICK_MAX_MS 300 // макс интервал между нажатиями для двойного клика
+#define LONG_PRESS_MS 1700     // длительное нажатие (мс)
+#define DOUBLE_CLICK_MAX_MS 400 // макс интервал между нажатиями для двойного клика
 
 // ------------------- Глобальные объекты -------------------
 #if DPS310_EN
@@ -104,6 +111,10 @@
 
 #if BMP280_EN
   Adafruit_BMP280 BARO; 
+#endif
+
+#if BMP085_EN
+  Adafruit_BMP085 BARO; 
 #endif
 
 #if BLE_EN
@@ -177,15 +188,15 @@ float CalculateAltitude(float press);
 // ------------------- setup() -------------------
 void setup() {
   Serial.begin(SERIAL_BAUD);
-//  while (!Serial) delay(10);
+  while (!Serial) delay(10);
 
   // Инициализация пинов
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(MODE_BUTTON_PIN, INPUT_PULLUP);
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
 
-  if (!HardwareInit()){
-  Serial.println("Failed to initialize BARO sensor!"); while(1);
+  if (HardwareInit() != 0){
+  Serial.println("Failed to initialize BARO sensor!"); // while(1);
   }
   // Инициализация BLE
 #if BLE_EN
@@ -237,7 +248,7 @@ void loop() {
 // ------------------- Functions implementation -------------------
 // Sensor initialize
 int HardwareInit(){
-if (SIMULATION_MODE) return (0);
+//if (SIMULATION_MODE) return (0);
   Wire.begin(SDA_PIN, SCL_PIN);
 
 #if DPS310_EN
@@ -275,15 +286,24 @@ if (SIMULATION_MODE) return (0);
 
 #if BMP280_EN
   if (!BARO.begin()) {
-    Serial.println("Failed to initialize BMP280 BARO sensor!"); return (1);
+    Serial.println("Failed to initialize BMP280 BARO sensor!"); 
     while(1) delay(10);
+  }
     // Настройка BMP280: режим нормальный, oversampling x2, фильтр x4
   BARO.setSampling(Adafruit_BMP280::MODE_NORMAL,
                   Adafruit_BMP280::SAMPLING_X2, // Температура
                   Adafruit_BMP280::SAMPLING_X2, // Давление
                   Adafruit_BMP280::FILTER_X4,
                   Adafruit_BMP280::STANDBY_MS_125);
+  
+#endif
+
+#if BMP085_EN
+  if (!BARO.begin()) {
+    Serial.println("Failed to initialize BMP085 BARO sensor!"); 
+    while(1) delay(10);
   }
+  
 #endif
   return(0);
 }
@@ -359,6 +379,12 @@ float pressure;
   }
 #endif
 
+#if BMP085_EN
+  if (BARO.readPressure()) {
+  pressure = BARO.readPressure();
+  }
+#endif
+
     altitude = 44330.0 * (1.0 - pow(pressure / /*referencePressure*/ PRESSURE_SEA_LEVEL, 0.1903));
     altitude -= altitudeOffset;
 
@@ -429,7 +455,8 @@ void generateSound() {
     beepDuration = (unsigned long)(MIN_PULSE_DURATION + (MAX_PULSE_DURATION - MIN_PULSE_DURATION) * factor);
     pauseDuration = (unsigned long)(MIN_PAUSE_DURATION + (MAX_PAUSE_DURATION - MIN_PAUSE_DURATION) * factor);
   }
-
+  DBG_PRINT("*** beepDuration: "); DBG_PRINT(beepDuration);
+  DBG_PRINT("; pauseDuration: "); DBG_PRINTLN(pauseDuration);
   // Управление состоянием звука
   unsigned long now = millis();
   if (!isBeeping && !isPausing) {
@@ -439,6 +466,7 @@ void generateSound() {
     analogWrite(BUZZER_PIN, 128); // включить тон (можно использовать tone, но для PWM используем analogWrite)
     // Для генерации тона через PWM проще использовать библиотеку Tone, но для nRF52840 можно использовать функцию tone().
     // Здесь для упрощения используем tone (если доступна). Если нет, можно реализовать через таймер.
+    DBG_PRINT("TONE_FREQUENCY "); DBG_PRINTLN(TONE_FREQUENCY);
     tone(BUZZER_PIN, TONE_FREQUENCY);
   }
 
@@ -459,7 +487,7 @@ void generateSound() {
 // Обработка кнопки (долгое нажатие, двойное)
 void handleButton() {
   static bool lastButtonState = HIGH;
-  bool currentState = digitalRead(BUTTON_PIN);
+  bool currentState = digitalRead(MODE_BUTTON_PIN);
   unsigned long now = millis();
 
   // Нажатие (переход от HIGH к LOW)
@@ -475,14 +503,14 @@ void handleButton() {
       if (pressDuration >= LONG_PRESS_MS) {
         // Долгое нажатие - обнуление высоты
         altitudeOffset = altitude; // теперь текущая высота станет нулевой
-        Serial.println("Высота обнулена.");
+        Serial.println("High to zero");
         // Мигаем светодиодом для подтверждения
         digitalWrite(LED_PIN, HIGH);
-        delay(100);
+        delay(200);
         digitalWrite(LED_PIN, LOW);
-        delay(100);
+        delay(200);
         digitalWrite(LED_PIN, HIGH);
-        delay(100);
+        delay(200);
         digitalWrite(LED_PIN, LOW);
         clickCount = 0; // сброс счетчика кликов
       } else {
@@ -502,7 +530,7 @@ void handleButton() {
           clickCount = 0;
           // Сигнал светодиодом
           digitalWrite(LED_PIN, HIGH);
-          delay(50);
+          delay(200);
           digitalWrite(LED_PIN, LOW);
         }
       }
@@ -545,7 +573,7 @@ void simulateVario() {
   float simSpeed = 2.0 * sin(simTime * 0.5); // амплитуда 2 м/с, период ~12 с
   // Имитируем изменение высоты (интегрируем скорость)
   static float simAlt = 0.0;
-  simAlt += simSpeed * 0.1; // dt=0.1 с
+  simAlt += simSpeed * 0.05; // dt=0.1 с
   altitude = simAlt;
   verticalSpeed = simSpeed; // пропускаем фильтр Калмана для наглядности
   // Можно применить фильтр и к симуляции
@@ -606,4 +634,16 @@ void startOTAUpdate() {
   // В данном примере мы просто перезагружаемся.
   // NVIC_SystemReset();
 }
+#endif
+
+#define ADAFRUIT_DPS310_LIB false
+#define DPS310_LIB      false
+#define LPS22HB_LIB	false
+
+#if ADAFRUIT_DPS310_LIB
+#include <Adafruit_DPS310.h>
+#elif DPS310_LIB
+#include <DPS310.h>
+#elif LPS22HB_LIB
+#include <Arduino_LPS22HB.h>
 #endif
