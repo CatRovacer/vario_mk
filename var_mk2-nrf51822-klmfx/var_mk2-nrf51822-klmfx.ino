@@ -20,17 +20,25 @@
   #define DBG_PRINTLN(...)
   #define DBG_PRINTF(...)
 #endif
-//esp32c6
+
+#define esp32c6_brd true
+#if esp32c6_brd
 #define SDA_PIN 20
 #define SCL_PIN 19
+#define BUZZER_PIN  18
+#define LED_PIN     15    // Встроенный светодиод (опционально)
+#define MODE_BUTTON_PIN   9    // Кнопка калибровки
+#endif
 
-// === ПИН-НАЗНАЧЕНИЯ ДЛЯ NRF51822 ===
+#define nrf51802_brd false
+#if nrf51802_brd
 #define BUZZER_PIN    18     // Выход на динамик
 #define MODE_BUTTON_PIN   0    // Кнопка калибровки
 
-// #define BUZZER_PIN    8     // Выход на динамик
-// #define MODE_BUTTON_PIN   13    // Кнопка калибровки
+#define BUZZER_PIN    8     // Выход на динамик
+#define MODE_BUTTON_PIN   13    // Кнопка калибровки
 #define LED_PIN     17    // Встроенный светодиод (опционально)
+#endif
 
 // === ПАРАМЕТРЫ ВАРИОМЕТРА ===
 const float SMOOTHING_FACTOR = 0.35;  // Коэффициент сглаживания вертикальной скорости (меньше = плавнее)
@@ -43,9 +51,9 @@ const float SINK_THRESHOLD = -0.3;    // Ниже этого пищим низк
 const float ZERO_THRESHOLD = 0.1;     // Зона молчания +/- 0.1 м/с
 
 // Частоты звука (Гц)
-const int TONE_FAST_CLIMB = 2200;      // Быстрый набор -> Высокий тон
-const int TONE_SLOW_CLIMB = 1500;      // Медленный набор
-const int TONE_SINK = 600;             // Снижение -> Низкий тон
+const int TONE_FAST_CLIMB = 1700;      // Быстрый набор -> Высокий тон
+const int TONE_SLOW_CLIMB = 800;      // Медленный набор
+const int TONE_SINK = 500;             // Снижение -> Низкий тон
 const int TONE_FAST_SINK = 300;        // Быстрое снижение (прерывистый гудок)
 
 // Параметры фильтра Калмана (масштабированные)
@@ -125,9 +133,11 @@ void playVariometerTone(float speed) {
   int frequency = 0;
   int duration = getBeepDuration(speed);
   bool isSound = true;
+//    DBG_PRINT("vSp = ");    DBG_PRINTLN(speed);
 
   // 1. Зона молчания (терпимость)
   if (abs(speed) < ZERO_THRESHOLD) {
+//    DBG_PRINTLN("Shut buzzer.");
     noTone(BUZZER_PIN);
     digitalWrite(LED_PIN, LOW);
     return;
@@ -139,7 +149,8 @@ void playVariometerTone(float speed) {
     // Диапазон от 1500Гц (0.3м/с) до 2400Гц (5м/с)
     frequency = map(constrain(speed, 0.3, 5.0) * 100, 30, 500, TONE_SLOW_CLIMB, TONE_FAST_CLIMB);
     frequency = constrain(frequency, TONE_SLOW_CLIMB, TONE_FAST_CLIMB);
-    digitalWrite(LED_PIN, HIGH);
+//    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Мерцание
   } 
   else if (speed < SINK_THRESHOLD) {
     // СНИЖЕНИЕ: Звук прерывистый, низкий. Чем быстрее падаем, тем ниже тон (страшнее)
@@ -153,6 +164,7 @@ void playVariometerTone(float speed) {
   if (frequency > 0) {
     // Длительность звучания - половина общего времени импульса (чтобы были четкие паузы)
     int soundDuration = duration / 2;
+    DBG_PRINT("\n***playVariometerTone; Tone: freq/durat: ");  DBG_PRINT(frequency,3); DBG_PRINTLN(soundDuration);  
     tone(BUZZER_PIN, frequency, soundDuration);
     // Пауза между писками (оставшаяся часть времени + задержка на прерывистость)
     delay(duration);
@@ -161,7 +173,7 @@ void playVariometerTone(float speed) {
 
 // === КАЛИБРОВКА НУЛЯ (Земля/Старт) ===
 void calibrateZero() {
-  DBG_PRINTLN("--- CALIBRATION ---");
+//  DBG_PRINTLN("***calibrateZero");
   // Берем 50 замеров для усреднения
   float sum = 0;
 
@@ -178,7 +190,7 @@ void calibrateZero() {
   tone(BUZZER_PIN, 2000, 100);
   delay(150);
   tone(BUZZER_PIN, 2500, 100);
-  DBG_PRINT("Reference set to: ");
+  DBG_PRINT("*** calibrateZero; Reference pressure set to: ");
   DBG_PRINTLN(groundReference);
 }
 
@@ -187,24 +199,22 @@ void setup() {
   Serial.begin(115200);
 //    while (!Serial) delay(10);
 
-//  DBG_PRINTLN("Vegetable Variometer mk2");
-	Serial.println("Vegetable Variometer mk2");
+  DBG_PRINTLN("\n\n*** Vegetable Variometer mk2***");
     // Настройка пинов
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(MODE_BUTTON_PIN, INPUT_PULLDOWN); // Для nRF используем внутренний Pull-down если есть, иначе внешний резистор 10кОм на GND
+  pinMode(MODE_BUTTON_PIN, INPUT_PULLUP); // Для nRF используем INPUT_PULLDOWN внутренний Pull-down если есть, иначе внешний резистор 10кОм на GND
   pinMode(LED_PIN, OUTPUT);
   for (int i = 0; i < 5; i++){
     digitalWrite(LED_PIN, HIGH);
-    delay(500);
+    delay(200);
     digitalWrite(LED_PIN, LOW);
-    delay(500);
+    delay(200);
   }
 
   // Инициализация BMP085
   Wire.begin(SDA_PIN, SCL_PIN);
   if (!BARO.begin()) {
-	  Serial.println("Could not find a valid BMP085 sensor, check wiring!");
-//    DBG_PRINTLN("BMP085 init ERROR!");
+    DBG_PRINTLN("*** setup; BMP085 init ERROR!");
     // Код ошибки: бесконечный писк
     while (1) {
       tone(BUZZER_PIN, 1000, 500);
@@ -212,11 +222,11 @@ void setup() {
     }
   }
   
-  DBG_PRINTLN("BMP085 OK. Press button to set zero altitude.");
+  DBG_PRINTLN("*** setup; BMP085 OK. Press button to set zero altitude.");
   
   // Ожидание калибровки перед стартом
   calibrateZero();
-#if 0
+#if 1
   while (!isCalibrated) {
     if (digitalRead(MODE_BUTTON_PIN) == HIGH) {
       delay(50); // Антидребезг
@@ -239,7 +249,7 @@ void setup() {
 // === ГЛАВНЫЙ ЦИКЛ ===
 void loop() {
   // 1. Обработка кнопки (Калибровка на лету / Сброс)
-  if (digitalRead(MODE_BUTTON_PIN) == HIGH) {
+  if (digitalRead(MODE_BUTTON_PIN) == LOW) {
     if (millis() - lastButtonPress > 500) { // Защита от ложных срабатываний
       calibrateZero(); // Сбрасываем текущую высоту в ноль
       lastButtonPress = millis();
@@ -264,11 +274,11 @@ void loop() {
   
   // 3. Расчет вертикальной скорости (dV/dt)
   unsigned long now = millis();
-  float dt = (now - lastTime) / 1000.0;
-  
-  if (dt >= 0.05 && dt < 1.0) { // Расчет с частотой ~20 Гц
+  float dt = (now - lastTime); // / 1000.0;
+  DBG_PRINT("*** loop; dt = "); DBG_PRINTLN(dt); 
+  if (dt >= 50 && dt < 1000) { // Расчет с частотой ~20 Гц
     float deltaAlt = currentAltitude - previousAltitude;
-    float instantSpeed = deltaAlt / dt;
+    float instantSpeed = (deltaAlt * 1000)/ dt;
     
     // Экспоненциальное сглаживание (аналог Brauniger)
     // filteredSpeed = (instantSpeed * FACTOR) + (filteredSpeed * (1-FACTOR))
@@ -279,7 +289,7 @@ void loop() {
     lastTime = now;
     
     // Вывод в Serial монитор для отладки
-    DBG_PRINT("Alt:"); DBG_PRINT(currentAltitude, 2);
+    DBG_PRINT("*** loop; Alt:"); DBG_PRINT(currentAltitude, 2);
     DBG_PRINT("m | V:"); DBG_PRINT(verticalSpeed, 2);
     DBG_PRINTLN("m/s");
   }
