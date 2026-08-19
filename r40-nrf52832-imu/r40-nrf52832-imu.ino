@@ -11,6 +11,7 @@
 
 // Live-verified map: R=27 G=28 B=29 (common-anode). P0.30 = flash CS — not LED.
 static const uint8_t LED_R = 27, LED_G = 28, LED_B = 29;
+//static const uint8_t LED_R = 17, LED_G = 18, LED_B = 29;
 static const uint8_t FLASH_CS = 30, FLASH_MOSI = 25, FLASH_SCK = 26, FLASH_MISO = 31;
 static const char *DEVICE_NAME = "R40_IMU";
 

@@ -7,7 +7,8 @@
 */
 
 #include <Wire.h>
-#include <Adafruit_BMP085.h>
+//#include <Adafruit_BMP085.h>
+#include <Adafruit_BMP280.h>
 
 #define VERBOSE_ENABLED true
 
@@ -21,8 +22,10 @@
   #define DBG_PRINTF(...)
 #endif
 
-#define esp32c6_brd true
-#define nrf51802_brd false
+#define esp32c6_brd false
+#define nrf52802_E73brd false
+#define nrf51802_sens false
+#define nrf52822_R40sens true
 
 #if esp32c6_brd
 #define SDA_PIN 20
@@ -32,8 +35,26 @@
 #define MODE_BUTTON_PIN   9    // Кнопка калибровки
 #endif
 
-#if nrf51802_brd
-#define BUZZER_PIN    17     // Выход на динамик
+#if nrf52802_E73brd
+#define SDA_PIN xx
+#define SCL_PIN xx
+#define BUZZER_PIN    xx     // Выход на динамик
+#define MODE_BUTTON_PIN   14    // Кнопка калибровки
+#define LED_PIN     17    // Встроенный светодиод (опционально)
+#endif
+
+#if nrf51802_sens
+#define SDA_PIN xx
+#define SCL_PIN xx
+#define BUZZER_PIN  xx     // Выход на динамик
+#define MODE_BUTTON_PIN   xx    // Кнопка калибровки
+#define LED_PIN     xx    // Встроенный светодиод (опционально)
+#endif
+
+#if nrf52822_R40sens
+#define SDA_PIN 11
+#define SCL_PIN 12
+#define BUZZER_PIN    04     // Выход на динамик
 #define MODE_BUTTON_PIN   18    // Кнопка калибровки
 #define LED_PIN     17    // Встроенный светодиод (опционально)
 #endif
@@ -111,8 +132,8 @@ int getBeepDuration(float climbRate) {
 }
 
 // === ГЛОБАЛЬНЫЕ ОБЪЕКТЫ ===
-Adafruit_BMP085 BARO;
-//SimpleKalmanFilter kalmanFilter(KALMAN_NOISE, KALMAN_NOISE, 0.01);
+//Adafruit_BMP085 BARO;
+Adafruit_BMP280 BARO;
 
 // Переменные для расчетов
 float currentAltitude = 0;
