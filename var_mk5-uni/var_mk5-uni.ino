@@ -43,10 +43,15 @@
 
 // ------------------- Настройки пинов -------------------
 #define esp32c6_brd true
-#define esp32s3_brd false
-#define nrf51802_brd false 
-#define nrf52840_brd false 
+//#define esp32s3_brd true
+//#define nrf52802_E73brd true
+//#define nrf51802_sens false
+//#define nrf52822_R40sens true
+//#define nrf52840_brd true 
 
+#include "hardware_pins.h"
+
+#if 0  // mut remove to be
 #if esp32c6_brd
 #define SDA_PIN 20
 #define SCL_PIN 19
@@ -74,7 +79,7 @@
 #define MODE_BUTTON_PIN   18    // Кнопка калибровки
 #define LED_PIN     15    // Встроенный светодиод (опционально)
 #endif
-
+#endif
 
 // ------------------- Параметры вариометра -------------------
 #define SERIAL_BAUD 115200

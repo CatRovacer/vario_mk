@@ -22,42 +22,15 @@
   #define DBG_PRINTF(...)
 #endif
 
-#define esp32c6_brd false
-#define nrf52802_E73brd false
-#define nrf51802_sens false
-#define nrf52822_R40sens true
+//#define esp32c6_brd true
+//#define esp32s3_brd true
+//#define nrf52802_E73brd true
+#define nrf51802_sens true
+//#define nrf52822_R40sens true
+//#define nrf52840_brd true 
 
-#if esp32c6_brd
-#define SDA_PIN 20
-#define SCL_PIN 19
-#define BUZZER_PIN  18
-#define LED_PIN     15    // Встроенный светодиод (опционально)
-#define MODE_BUTTON_PIN   9    // Кнопка калибровки
-#endif
+#include "hardware_pins.h"
 
-#if nrf52802_E73brd
-#define SDA_PIN xx
-#define SCL_PIN xx
-#define BUZZER_PIN    xx     // Выход на динамик
-#define MODE_BUTTON_PIN   14    // Кнопка калибровки
-#define LED_PIN     17    // Встроенный светодиод (опционально)
-#endif
-
-#if nrf51802_sens
-#define SDA_PIN xx
-#define SCL_PIN xx
-#define BUZZER_PIN  xx     // Выход на динамик
-#define MODE_BUTTON_PIN   xx    // Кнопка калибровки
-#define LED_PIN     xx    // Встроенный светодиод (опционально)
-#endif
-
-#if nrf52822_R40sens
-#define SDA_PIN 11
-#define SCL_PIN 12
-#define BUZZER_PIN    04     // Выход на динамик
-#define MODE_BUTTON_PIN   18    // Кнопка калибровки
-#define LED_PIN     17    // Встроенный светодиод (опционально)
-#endif
 
 // === ПАРАМЕТРЫ ВАРИОМЕТРА ===
 const float SMOOTHING_FACTOR = 0.35;  // Коэффициент сглаживания вертикальной скорости (меньше = плавнее)

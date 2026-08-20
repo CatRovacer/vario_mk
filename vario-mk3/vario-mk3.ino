@@ -19,26 +19,19 @@
 
 #include <Wire.h>
 #include <Adafruit_BMP085.h>
+//#include <Adafruit_BMP280.h>
 #include <ArduinoBLE.h>
 
-// ==================== НАСТРОЙКИ ====================
-#define esp32c6_brd true
-#define esp32s3_brd false
-#define nrf51802_brd false 
-#define nrf52840_brd false 
+// ==================== НАСТРОЙКИ ppins ====================
+//#define esp32c6_brd true
+//#define esp32s3_brd true
+//#define nrf52802_E73brd true
+#define nrf51802_sens true
+//#define nrf52822_R40sens true
+//#define nrf52840_brd true 
 
-#if esp32c6_brd
-#define SDA_PIN 20
-#define SCL_PIN 19
-#define BUZZER_PIN  18
-#define LED_PIN     15    // Встроенный светодиод (опционально)
-#define MODE_BUTTON_PIN   9    // Кнопка калибровки
-#endif
-#if 0
-#define MODE_BUTTON_PIN 6
-#define BUZZER_PIN 5
-//#define SIMULATION_PIN 7          // замкнуть на GND для входа в режим симуляции
-#endif
+#include "hardware_pins.h"
+
 
 #define SIMULATION_MODE false  // true - режим симуляции, false - реальные данные
 
@@ -58,6 +51,7 @@
 
 // ==================== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ====================
 Adafruit_BMP085 BARO;
+//Adafruit_BMP280 BARO;
 
 // Фильтр Калмана для высоты
 float kalman_X = 0;               // оценка состояния (высота)
